@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fast File Transfer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+        .drag-over { background-color: #dbeafe !important; border: 2px dashed #3b82f6; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans min-h-screen p-2 md:p-8 relative pb-24">
+
+    <div class="max-w-5xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
+        
+        <div class="bg-blue-600 p-4 md:p-6 text-white flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+            <h1 class="text-xl md:text-2xl font-bold">Cloud Transfer</h1>
+            <div id="pathDisplay" class="text-xs md:text-sm bg-blue-700 px-3 py-1.5 rounded opacity-90 break-all w-full md:w-auto text-left">/</div>
+        </div>
+
+        <div id="progressContainer" class="hidden bg-gray-50 px-6 py-4 border-b">
+            <div class="flex justify-between text-sm mb-1 text-gray-600 font-semibold">
+                <span id="progressName" class="truncate max-w-[60%]">Uploading...</span>
+                <span id="progressText" class="text-blue-600">0% (0 MB/s)</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-3">
+                <div id="progressBar" class="bg-blue-600 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="p-4 md:p-6 border-b flex flex-col md:flex-row gap-4 justify-between bg-gray-50">
+            <div class="flex w-full md:w-auto">
+                <input type="text" id="folderName" placeholder="New Folder Name" class="border border-gray-300 rounded-l-lg px-4 py-3 md:py-2 w-full focus:outline-none focus:border-blue-500">
+                <button onclick="createFolder()" class="bg-gray-800 text-white px-5 py-3 md:py-2 rounded-r-lg hover:bg-gray-700 transition font-semibold">Create</button>
+            </div>
+            
+            <div class="flex gap-2 w-full md:w-auto">
+                <label class="flex-1 flex items-center justify-center bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 cursor-pointer transition font-bold shadow-md text-sm whitespace-nowrap">
+                    📄 Upload Files
+                    <input type="file" multiple class="hidden" onchange="uploadFiles(event)">
+                </label>
+                <label class="flex-1 flex items-center justify-center bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 cursor-pointer transition font-bold shadow-md text-sm whitespace-nowrap">
+                    📁 Upload Folder
+                    <input type="file" webkitdirectory directory multiple class="hidden" onchange="uploadFiles(event)">
+                </label>
+            </div>
+        </div>
+
+        <div class="p-4 md:p-6">
+            <button onclick="goBack()" id="backBtn" 
+                ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropOnBack(event)"
+                class="hidden mb-4 text-blue-600 hover:bg-blue-100 text-sm font-bold flex items-center bg-blue-50 px-3 py-2 rounded w-fit transition border-2 border-transparent">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                Go Back (Drop to move up)
+            </button>
+            
+            <div class="overflow-x-auto hide-scroll">
+                <table class="w-full text-left border-collapse select-none">
+                    <thead>
+                        <tr class="text-gray-400 text-sm border-b">
+                            <th class="pb-3 pl-2 w-10 text-center"><input type="checkbox" id="selectAll" class="w-4 h-4" onchange="toggleSelectAll(this)"></th>
+                            <th class="pb-3 font-medium pl-2">Name</th>
+                            <th class="pb-3 font-medium hidden md:table-cell">Type</th>
+                            <th class="pb-3 font-medium text-right pr-2">Options</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fileList">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="bulkActionBar" class="fixed bottom-0 left-0 w-full bg-gray-900 text-white p-4 flex justify-between items-center transform translate-y-full transition-transform duration-300 shadow-2xl z-50">
+        <div class="font-bold ml-4"><span id="selectedCount">0</span> Selected</div>
+        <div class="flex gap-2 mr-4">
+            <button onclick="bulkCopy()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded font-semibold transition text-sm md:text-base">Copy</button>
+            <button onclick="bulkMove()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded font-semibold transition text-sm md:text-base">Move</button>
+            <button onclick="bulkDelete()" class="bg-red-600 hover:bg-red-500 px-4 py-2 rounded font-semibold transition text-sm md:text-base">Delete</button>
+        </div>
+    </div>
+
+    <div id="actionModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 z-50 flex items-end md:items-center justify-center">
+        <div class="bg-white w-full md:w-96 rounded-t-2xl md:rounded-2xl p-6 shadow-2xl">
+            <h3 id="modalTitle" class="text-lg font-bold text-gray-800 mb-4 truncate border-b pb-2">Options</h3>
+            <div id="modalButtons" class="flex flex-col gap-3"></div>
+            <button onclick="closeModal()" class="mt-6 w-full bg-gray-100 text-gray-800 p-4 rounded-xl font-bold hover:bg-gray-200 transition">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        let currentPath = '';
+        let selectedItems = new Set();
+        let actionItem = null;
+        let isNavigating = false; // Navigation lock to prevent double-click bugs
+
+        document.addEventListener('DOMContentLoaded', loadFiles);
+
+        async function loadFiles() {
+            try {
+                const res = await fetch(`/api/files?path=${encodeURIComponent(currentPath)}`);
+                const data = await res.json();
+                if (data.error) return alert(data.error);
+
+                selectedItems.clear();
+                updateBulkUI();
+                document.getElementById('selectAll').checked = false;
+
+                document.getElementById('pathDisplay').innerText = `/${currentPath}`;
+                document.getElementById('backBtn').classList.toggle('hidden', currentPath === '');
+                
+                const tbody = document.getElementById('fileList');
+                tbody.innerHTML = '';
+
+                if (data.files.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="4" class="py-8 text-center text-gray-400 font-medium">Folder is empty</td></tr>`;
+                    return;
+                }
+
+                data.files.sort((a, b) => b.isDirectory - a.isDirectory).forEach(file => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-b hover:bg-gray-50 transition cursor-grab active:cursor-grabbing';
+                    tr.draggable = true;
+                    tr.ondragstart = (e) => dragStart(e, file.name);
+
+                    if (file.isDirectory) {
+                        tr.ondragover = allowDrop;
+                        tr.ondragleave = dragLeave;
+                        tr.ondrop = (e) => dropOnFolder(e, file.name);
+                    }
+                    
+                    let nameHtml = file.isDirectory 
+                        ? `<button onclick="navigateTo('${file.name}')" class="text-blue-600 font-bold hover:underline flex items-center gap-3 py-3 w-full text-left truncate"><span class="text-xl">📁</span> ${file.name}</button>`
+                        : `<span class="flex items-center gap-3 text-gray-700 py-3 font-medium truncate"><span class="text-xl">📄</span> ${file.name}</span>`;
+
+                    tr.innerHTML = `
+                        <td class="text-center pl-2 w-10">
+                            <input type="checkbox" class="file-checkbox w-4 h-4 cursor-pointer" value="${file.name}" onchange="toggleSelection(this, '${file.name}')">
+                        </td>
+                        <td class="pl-2 w-full md:w-auto">${nameHtml}</td>
+                        <td class="text-sm text-gray-500 hidden md:table-cell">${file.isDirectory ? 'Folder' : 'File'}</td>
+                        <td class="pr-2 text-right">
+                            <button onclick="openModal('${file.name}', ${file.isZip})" class="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition">
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) { console.error(err); }
+        }
+
+        // --- Navigation (With Double-Click Protection) ---
+        function navigateTo(folder) {
+            if (isNavigating) return;
+            isNavigating = true;
+            currentPath = currentPath ? `${currentPath}/${folder}` : folder;
+            loadFiles().finally(() => isNavigating = false);
+        }
+
+        function goBack() {
+            if (isNavigating || !currentPath) return;
+            isNavigating = true;
+            const parts = currentPath.split('/');
+            parts.pop();
+            currentPath = parts.join('/');
+            loadFiles().finally(() => isNavigating = false);
+        }
+
+        // --- Selection & Bulk Logic ---
+        function toggleSelection(checkbox, name) {
+            if (checkbox.checked) selectedItems.add(name);
+            else selectedItems.delete(name);
+            updateBulkUI();
+        }
+
+        function toggleSelectAll(checkbox) {
+            const checkboxes = document.querySelectorAll('.file-checkbox');
+            if (checkbox.checked) {
+                checkboxes.forEach(cb => { cb.checked = true; selectedItems.add(cb.value); });
+            } else {
+                checkboxes.forEach(cb => { cb.checked = false; });
+                selectedItems.clear();
+            }
+            updateBulkUI();
+        }
+
+        function updateBulkUI() {
+            const bar = document.getElementById('bulkActionBar');
+            document.getElementById('selectedCount').innerText = selectedItems.size;
+            if (selectedItems.size > 0) bar.classList.remove('translate-y-full');
+            else { bar.classList.add('translate-y-full'); document.getElementById('selectAll').checked = false; }
+        }
+
+        // --- Drag & Drop Logic ---
+        function dragStart(e, name) {
+            let itemsToDrag = Array.from(selectedItems);
+            if (!selectedItems.has(name)) itemsToDrag = [name];
+            e.dataTransfer.setData('text/plain', JSON.stringify(itemsToDrag));
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function allowDrop(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+        function dragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+
+        async function dropOnFolder(e, folderName) {
+            e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+            try {
+                const items = JSON.parse(e.dataTransfer.getData('text/plain'));
+                const targetPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+                await processBulkAction('/api/bulk-move', items, targetPath);
+            } catch(err) { console.error("Invalid drop"); }
+        }
+
+        async function dropOnBack(e) {
+            e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+            if (!currentPath) return;
+            try {
+                const items = JSON.parse(e.dataTransfer.getData('text/plain'));
+                const parts = currentPath.split('/');
+                parts.pop();
+                const targetPath = parts.join('/');
+                await processBulkAction('/api/bulk-move', items, targetPath);
+            } catch(err) { console.error("Invalid drop"); }
+        }
+
+        async function processBulkAction(endpoint, items, targetFolderPath = null) {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ currentPath, items, targetFolderPath })
+            });
+            const data = await res.json();
+            if (data.success) loadFiles(); else alert(data.error);
+        }
+
+        function bulkMove() {
+            const target = prompt(`Moving ${selectedItems.size} items.\nEnter destination folder (leave blank for root '/'):`, "");
+            if (target !== null) processBulkAction('/api/bulk-move', Array.from(selectedItems), target);
+        }
+        function bulkCopy() {
+            const target = prompt(`Copying ${selectedItems.size} items.\nEnter destination folder (leave blank for root '/'):`, "");
+            if (target !== null) processBulkAction('/api/bulk-copy', Array.from(selectedItems), target);
+        }
+        function bulkDelete() {
+            if (confirm(`Are you sure you want to delete ${selectedItems.size} items?`)) {
+                processBulkAction('/api/bulk-delete', Array.from(selectedItems));
+            }
+        }
+
+        async function createFolder() {
+            const folderName = document.getElementById('folderName').value.trim();
+            if (!folderName) return alert('Enter a folder name');
+            const res = await fetch('/api/create-folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ currentPath, folderName })
+            });
+            const data = await res.json();
+            if (data.success) { document.getElementById('folderName').value = ''; loadFiles(); }
+            else alert(data.error);
+        }
+
+        // --- Fast Concurrent Batch Uploader ---
+        async function uploadFiles(event) {
+            const files = Array.from(event.target.files);
+            if (!files.length) return;
+
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const progressName = document.getElementById('progressName');
+
+            progressName.innerText = `Preparing ${files.length} items...`;
+            progressContainer.classList.remove('hidden');
+            
+            let totalSize = files.reduce((sum, f) => sum + f.size, 0);
+            let totalLoaded = 0;
+            let startTime = Date.now();
+            let currentIndex = 0;
+            let activeUploads = 0;
+            const CONCURRENCY_LIMIT = 5; // Upload up to 5 files at exactly the same time
+
+            const uploadNext = () => {
+                return new Promise((resolve) => {
+                    const processQueue = () => {
+                        if (currentIndex >= files.length && activeUploads === 0) {
+                            resolve(); // All files finished
+                            return;
+                        }
+
+                        while (activeUploads < CONCURRENCY_LIMIT && currentIndex < files.length) {
+                            const file = files[currentIndex++];
+                            activeUploads++;
+
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            
+                            // Handle folder structure if uploaded via "Upload Folder"
+                            let targetDir = currentPath;
+                            if (file.webkitRelativePath) {
+                                const pathParts = file.webkitRelativePath.split('/');
+                                pathParts.pop(); // Remove filename from path
+                                if (pathParts.length > 0) {
+                                    targetDir = currentPath ? `${currentPath}/${pathParts.join('/')}` : pathParts.join('/');
+                                }
+                            }
+
+                            const xhr = new XMLHttpRequest();
+                            xhr.open('POST', `/api/upload?path=${encodeURIComponent(targetDir)}`, true);
+
+                            let lastLoaded = 0;
+                            xhr.upload.onprogress = (e) => {
+                                if (e.lengthComputable) {
+                                    totalLoaded += (e.loaded - lastLoaded);
+                                    lastLoaded = e.loaded;
+                                    
+                                    const percent = totalSize > 0 ? Math.min(100, Math.round((totalLoaded / totalSize) * 100)) : 100;
+                                    const timeElapsed = (Date.now() - startTime) / 1000;
+                                    const speed = timeElapsed > 0 ? (totalLoaded / (1024 * 1024) / timeElapsed).toFixed(1) : 0;
+                                    
+                                    progressBar.style.width = percent + '%';
+                                    progressText.innerText = `${percent}% (${speed} MB/s)`;
+                                    progressName.innerText = `Uploading ${files.length} items...`;
+                                }
+                            };
+
+                            xhr.onload = xhr.onerror = () => {
+                                activeUploads--;
+                                processQueue(); // Pull next file from queue
+                            };
+
+                            xhr.send(formData);
+                        }
+                    };
+                    processQueue();
+                });
+            };
+
+            await uploadNext();
+            
+            progressName.innerText = "Complete!";
+            setTimeout(() => progressContainer.classList.add('hidden'), 1500);
+            event.target.value = ''; // Reset input
+            loadFiles();
+        }
+
+        // --- Single Action Modal ---
+        function openModal(itemName, isZip) {
+            actionItem = itemName;
+            document.getElementById('modalTitle').innerText = itemName;
+            document.getElementById('actionModal').classList.remove('hidden');
+            const btnContainer = document.getElementById('modalButtons');
+            btnContainer.innerHTML = ''; 
+
+            if (isZip) btnContainer.innerHTML += `<button onclick="singleUnzip()" class="w-full bg-green-500 text-white p-4 rounded-xl font-bold text-lg hover:bg-green-600 transition shadow-sm mb-2">📦 Unzip Here</button>`;
+            btnContainer.innerHTML += `
+                <button onclick="singleAction('copy')" class="w-full bg-blue-100 text-blue-700 p-4 rounded-xl font-bold text-lg hover:bg-blue-200 transition">📄 Copy</button>
+                <button onclick="singleAction('move')" class="w-full bg-purple-100 text-purple-700 p-4 rounded-xl font-bold text-lg hover:bg-purple-200 transition">📁 Move</button>
+                <button onclick="singleAction('delete')" class="w-full bg-red-100 text-red-700 p-4 rounded-xl font-bold text-lg hover:bg-red-200 transition mt-2 border border-red-200">🗑️ Delete</button>
+            `;
+        }
+        function closeModal() { document.getElementById('actionModal').classList.add('hidden'); actionItem = null; }
+
+        async function singleUnzip() {
+            const item = actionItem; closeModal();
+            const res = await fetch('/api/unzip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ currentPath, fileName: item })
+            });
+            if ((await res.json()).success) loadFiles(); else alert(data.error);
+        }
+
+        function singleAction(type) {
+            const item = actionItem; closeModal();
+            if (type === 'delete') {
+                if (confirm(`Delete "${item}"?`)) processBulkAction('/api/bulk-delete', [item]);
+            } else if (type === 'move') {
+                const target = prompt(`Moving "${item}".\nEnter destination (leave blank for root '/'):`, "");
+                if (target !== null) processBulkAction('/api/bulk-move', [item], target);
+            } else if (type === 'copy') {
+                const target = prompt(`Copying "${item}".\nEnter destination (leave blank for root '/'):`, "");
+                if (target !== null) processBulkAction('/api/bulk-copy', [item], target);
+            }
+        }
+    </script>
+</body>
+</html>
