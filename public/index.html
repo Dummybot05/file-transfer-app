@@ -260,84 +260,93 @@
             else alert(data.error);
         }
 
-        // --- Strictly Sequential Uploader with Path Snapshotting ---
-        async function uploadFiles(event) {
-            const files = Array.from(event.target.files);
-            if (!files.length) return;
+        // --- Concurrent Batch Uploader with Path Snapshotting ---
+async function uploadFiles(event) {
+    const files = Array.from(event.target.files);
+    if (!files.length) return;
 
-            // Take a snapshot of the current path when the upload starts
-            // This prevents bugs if the user navigates to a new folder while files are uploading
-            const uploadSnapshotPath = currentPath;
+    const uploadSnapshotPath = currentPath;
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const progressName = document.getElementById('progressName');
 
-            const progressContainer = document.getElementById('progressContainer');
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const progressName = document.getElementById('progressName');
+    progressContainer.classList.remove('hidden');
+    
+    let totalSize = files.reduce((sum, f) => sum + f.size, 0);
+    let totalLoaded = 0;
+    let startTime = Date.now();
 
-            progressContainer.classList.remove('hidden');
+    // How many files to upload at the exact same time
+    const CONCURRENCY_LIMIT = 5; 
+    let filesCompleted = 0;
+
+    // Helper function to upload a single file
+    const uploadSingleFile = (file) => {
+        return new Promise((resolve, reject) => {
+            const formData = new FormData();
+            formData.append('file', file);
             
-            let totalSize = files.reduce((sum, f) => sum + f.size, 0);
-            let totalLoaded = 0;
-            let startTime = Date.now();
-
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                progressName.innerText = `Uploading to /${uploadSnapshotPath} (${i + 1}/${files.length}): ${file.name}`;
-                
-                await new Promise((resolve, reject) => {
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    
-                    // Use the snapshot path instead of currentPath
-                    let targetDir = uploadSnapshotPath;
-                    if (file.webkitRelativePath) {
-                        const pathParts = file.webkitRelativePath.split('/');
-                        pathParts.pop(); 
-                        if (pathParts.length > 0) {
-                            targetDir = uploadSnapshotPath ? `${uploadSnapshotPath}/${pathParts.join('/')}` : pathParts.join('/');
-                        }
-                    }
-
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('POST', `/api/upload?path=${encodeURIComponent(targetDir)}`, true);
-
-                    let fileLastLoaded = 0;
-                    xhr.upload.onprogress = (e) => {
-                        if (e.lengthComputable) {
-                            totalLoaded += (e.loaded - fileLastLoaded);
-                            fileLastLoaded = e.loaded;
-                            
-                            const percent = totalSize > 0 ? Math.min(100, Math.round((totalLoaded / totalSize) * 100)) : 100;
-                            const timeElapsed = (Date.now() - startTime) / 1000;
-                            const speed = timeElapsed > 0 ? (totalLoaded / (1024 * 1024) / timeElapsed).toFixed(1) : 0;
-                            
-                            progressBar.style.width = percent + '%';
-                            progressText.innerText = `${percent}% (${speed} MB/s)`;
-                        }
-                    };
-
-                    xhr.onload = () => {
-                        if (xhr.status === 200) resolve();
-                        else {
-                            try { reject(JSON.parse(xhr.responseText).error || 'Upload failed'); } 
-                            catch (e) { reject('Upload failed'); }
-                        }
-                    };
-                    
-                    xhr.onerror = () => reject('Network Error');
-                    xhr.send(formData);
-                }).catch(err => alert(`Error uploading ${file.name}: ${err}`));
-
-                // Only refresh the UI if the user is STILL in the folder where the upload is happening
-                if (currentPath === uploadSnapshotPath) {
-                    loadFiles();
+            let targetDir = uploadSnapshotPath;
+            if (file.webkitRelativePath) {
+                const pathParts = file.webkitRelativePath.split('/');
+                pathParts.pop(); 
+                if (pathParts.length > 0) {
+                    targetDir = uploadSnapshotPath ? `${uploadSnapshotPath}/${pathParts.join('/')}` : pathParts.join('/');
                 }
             }
 
-            progressName.innerText = "All Complete!";
-            setTimeout(() => progressContainer.classList.add('hidden'), 1500);
-            event.target.value = ''; 
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `/api/upload?path=${encodeURIComponent(targetDir)}`, true);
+
+            let fileLastLoaded = 0;
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    totalLoaded += (e.loaded - fileLastLoaded);
+                    fileLastLoaded = e.loaded;
+                    
+                    const percent = totalSize > 0 ? Math.min(100, Math.round((totalLoaded / totalSize) * 100)) : 100;
+                    const timeElapsed = (Date.now() - startTime) / 1000;
+                    const speed = timeElapsed > 0 ? (totalLoaded / (1024 * 1024) / timeElapsed).toFixed(1) : 0;
+                    
+                    progressBar.style.width = percent + '%';
+                    progressText.innerText = `${percent}% (${speed} MB/s)`;
+                }
+            };
+
+            xhr.onload = () => {
+                if (xhr.status === 200) resolve();
+                else reject('Upload failed');
+            };
+            
+            xhr.onerror = () => reject('Network Error');
+            xhr.send(formData);
+        });
+    };
+
+    // Process files in batches to maximize bandwidth without crashing
+    for (let i = 0; i < files.length; i += CONCURRENCY_LIMIT) {
+        const batch = files.slice(i, i + CONCURRENCY_LIMIT);
+        
+        progressName.innerText = `Uploading batch ${Math.ceil(i/CONCURRENCY_LIMIT) + 1} of ${Math.ceil(files.length/CONCURRENCY_LIMIT)}...`;
+        
+        try {
+            await Promise.all(batch.map(file => uploadSingleFile(file)));
+            filesCompleted += batch.length;
+        } catch (err) {
+            alert(`Error during batch upload: ${err}`);
+            break; // Stop the loop if a batch fails
         }
+    }
+
+    if (currentPath === uploadSnapshotPath) {
+        loadFiles();
+    }
+
+    progressName.innerText = "All Complete!";
+    setTimeout(() => progressContainer.classList.add('hidden'), 1500);
+    event.target.value = ''; 
+}
 
         // --- Single Action Modal ---
         function openModal(itemName, isZip) {
