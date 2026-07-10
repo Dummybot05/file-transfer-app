@@ -15,13 +15,20 @@ app.use(express.static('public'));
 const BASE_DIR = path.resolve(__dirname, '../external_uploads');
 if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
 
+// Production-ready path validation
 const getSafePath = (reqPath) => {
+    if (reqPath && reqPath.indexOf('\0') !== -1) throw new Error('Invalid path characters');
+    
     const targetPath = path.resolve(BASE_DIR, reqPath || '');
-    if (!targetPath.startsWith(BASE_DIR)) throw new Error('Unauthorized path access');
+    
+    // Strict directory boundary check to prevent partial matching (e.g. /uploads vs /uploads_secret)
+    if (targetPath !== BASE_DIR && !targetPath.startsWith(BASE_DIR + path.sep)) {
+        throw new Error('Unauthorized path access');
+    }
     return targetPath;
 };
 
-// Multer configured to create sub-directories dynamically for folder uploads
+// Optimized Multer: Folders are created on demand, errors caught gracefully
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         try { 
@@ -30,15 +37,20 @@ const storage = multer.diskStorage({
                 fs.mkdirSync(targetDir, { recursive: true });
             }
             cb(null, targetDir); 
-        } 
-        catch (err) { cb(err); }
+        } catch (err) { 
+            cb(err); 
+        }
     },
-    filename: (req, file, cb) => { cb(null, file.originalname); }
+    filename: (req, file, cb) => { 
+        // Prevent filename override vulnerabilities
+        const safeName = path.basename(file.originalname);
+        cb(null, safeName); 
+    }
 });
 
 const upload = multer({ 
     storage,
-    limits: { fileSize: 1024 * 1024 * 1024 } 
+    limits: { fileSize: 5 * 1024 * 1024 * 1024 } // Increased limit to 5GB per file
 });
 
 app.get('/api/files', (req, res) => {
@@ -51,7 +63,8 @@ app.get('/api/files', (req, res) => {
         const files = items.map(item => ({
             name: item.name,
             isDirectory: item.isDirectory(),
-            isZip: item.name.endsWith('.zip')
+            isZip: item.name.toLowerCase().endsWith('.zip'),
+            size: item.isDirectory() ? null : fs.statSync(path.join(targetDir, item.name)).size
         }));
         res.json({ files, currentPath });
     } catch (error) {
@@ -97,7 +110,6 @@ app.post('/api/unzip', (req, res) => {
     }
 });
 
-// --- RENAME OPERATION ---
 app.post('/api/rename', (req, res) => {
     try {
         const { currentPath, oldName, newName } = req.body;
@@ -116,7 +128,6 @@ app.post('/api/rename', (req, res) => {
     }
 });
 
-// --- BULK OPERATIONS ---
 app.post('/api/bulk-delete', (req, res) => {
     try {
         const { currentPath, items } = req.body;
@@ -160,6 +171,6 @@ app.post('/api/bulk-copy', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📁 Files saving to: ${BASE_DIR}`);
+    console.log(`🚀 Production Server running on http://localhost:${PORT}`);
+    console.log(`📁 Secure Base Directory: ${BASE_DIR}`);
 });

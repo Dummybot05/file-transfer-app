@@ -3,90 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fast File Transfer</title>
+    <title>CloudOS - File Transfer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .hide-scroll::-webkit-scrollbar { display: none; }
         .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
-        .drag-over { background-color: #dbeafe !important; border: 2px dashed #3b82f6; }
+        .drag-over { background-color: #eff6ff !important; border: 2px dashed #3b82f6; }
+        
+        /* Smooth transitions for upload cards */
+        .upload-card { transition: all 0.3s ease; }
+        .upload-card.completed { opacity: 0.6; }
+        .upload-card.cancelled { opacity: 0.4; filter: grayscale(100%); }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans min-h-screen p-2 md:p-8 relative pb-24">
+<body class="bg-white text-gray-800 font-sans h-screen w-full flex flex-col overflow-hidden select-none">
 
-    <div class="max-w-5xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
-        
-        <div class="bg-blue-600 p-4 md:p-6 text-white flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-            <h1 class="text-xl md:text-2xl font-bold">Cloud Transfer</h1>
-            <div id="pathDisplay" class="text-xs md:text-sm bg-blue-700 px-3 py-1.5 rounded opacity-90 break-all w-full md:w-auto text-left">/</div>
+    <header class="bg-gray-900 text-white h-16 flex items-center justify-between px-6 shrink-0 z-20">
+        <div class="flex items-center gap-4">
+            <h1 class="text-xl font-bold tracking-wide">CloudOS<span class="text-blue-500">.</span></h1>
+            <div id="pathDisplay" class="text-sm bg-gray-800 px-3 py-1.5 rounded-md text-gray-300 flex items-center font-mono">/</div>
         </div>
-
-        <div id="progressContainer" class="hidden bg-gray-50 px-6 py-4 border-b">
-            <div class="flex justify-between text-sm mb-1 text-gray-600 font-semibold">
-                <span id="progressName" class="truncate max-w-[60%]">Uploading...</span>
-                <span id="progressText" class="text-blue-600">0% (0 MB/s)</span>
-            </div>
-            <div class="w-full bg-gray-200 rounded-full h-3">
-                <div id="progressBar" class="bg-blue-600 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
-            </div>
-        </div>
-
-        <div class="p-4 md:p-6 border-b flex flex-col md:flex-row gap-4 justify-between bg-gray-50">
-            <div class="flex w-full md:w-auto">
-                <input type="text" id="folderName" placeholder="New Folder Name" class="border border-gray-300 rounded-l-lg px-4 py-3 md:py-2 w-full focus:outline-none focus:border-blue-500">
-                <button onclick="createFolder()" class="bg-gray-800 text-white px-5 py-3 md:py-2 rounded-r-lg hover:bg-gray-700 transition font-semibold">Create</button>
-            </div>
-            
-            <div class="flex gap-2 w-full md:w-auto">
-                <label class="flex-1 flex items-center justify-center bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 cursor-pointer transition font-bold shadow-md text-sm whitespace-nowrap">
-                    📄 Upload Files
-                    <input type="file" multiple class="hidden" onchange="uploadFiles(event)">
-                </label>
-                <label class="flex-1 flex items-center justify-center bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 cursor-pointer transition font-bold shadow-md text-sm whitespace-nowrap">
-                    📁 Upload Folder
-                    <input type="file" webkitdirectory directory multiple class="hidden" onchange="uploadFiles(event)">
-                </label>
-            </div>
-        </div>
-
-        <div class="p-4 md:p-6">
-            <button onclick="goBack()" id="backBtn" 
-                ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropOnBack(event)"
-                class="hidden mb-4 text-blue-600 hover:bg-blue-100 text-sm font-bold flex items-center bg-blue-50 px-3 py-2 rounded w-fit transition border-2 border-transparent">
-                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                Go Back (Drop to move up)
+        <div class="flex gap-3">
+            <button onclick="goBack()" id="backBtn" class="hidden hover:bg-gray-800 p-2 rounded-md transition text-sm flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                Up Directory
             </button>
-            
-            <div class="overflow-x-auto hide-scroll">
-                <table class="w-full text-left border-collapse select-none">
-                    <thead>
-                        <tr class="text-gray-400 text-sm border-b">
-                            <th class="pb-3 pl-2 w-10 text-center"><input type="checkbox" id="selectAll" class="w-4 h-4" onchange="toggleSelectAll(this)"></th>
-                            <th class="pb-3 font-medium pl-2">Name</th>
-                            <th class="pb-3 font-medium hidden md:table-cell">Type</th>
-                            <th class="pb-3 font-medium text-right pr-2">Options</th>
-                        </tr>
-                    </thead>
-                    <tbody id="fileList">
-                        </tbody>
-                </table>
+        </div>
+    </header>
+
+    <div class="border-b border-gray-200 bg-gray-50 p-4 flex flex-col sm:flex-row gap-4 justify-between shrink-0 z-10 shadow-sm">
+        <div class="flex w-full sm:w-96 shadow-sm rounded-lg overflow-hidden border border-gray-300">
+            <input type="text" id="folderName" placeholder="New Folder Name" class="px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+            <button onclick="createFolder()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-5 font-semibold transition border-l border-gray-300">Create</button>
+        </div>
+        
+        <div class="flex gap-3">
+            <label class="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 cursor-pointer transition font-semibold shadow-sm text-sm">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                Files
+                <input type="file" multiple class="hidden" onchange="queueFiles(event)">
+            </label>
+            <label class="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-lg hover:bg-indigo-700 cursor-pointer transition font-semibold shadow-sm text-sm">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                Folder
+                <input type="file" webkitdirectory directory multiple class="hidden" onchange="queueFiles(event)">
+            </label>
+        </div>
+    </div>
+
+    <main class="flex-1 overflow-y-auto bg-white" ondragover="allowDrop(event)" ondrop="dropToCurrent(event)">
+        <table class="w-full text-left border-collapse">
+            <thead class="sticky top-0 bg-white shadow-sm z-10">
+                <tr class="text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
+                    <th class="py-4 pl-6 w-12 text-center"><input type="checkbox" id="selectAll" class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" onchange="toggleSelectAll(this)"></th>
+                    <th class="py-4 font-semibold pl-2">Name</th>
+                    <th class="py-4 font-semibold hidden md:table-cell w-32">Size</th>
+                    <th class="py-4 font-semibold hidden sm:table-cell w-32">Type</th>
+                    <th class="py-4 font-semibold text-right pr-6 w-24">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="fileList" class="text-sm">
+                </tbody>
+        </table>
+    </main>
+
+    <div id="bulkActionBar" class="fixed bottom-0 left-0 w-full bg-blue-900 text-white p-4 flex justify-between items-center transform translate-y-full transition-transform duration-300 shadow-[0_-10px_40px_rgba(0,0,0,0.2)] z-30">
+        <div class="font-semibold ml-4 text-blue-100"><span id="selectedCount" class="text-white font-bold text-lg">0</span> items selected</div>
+        <div class="flex gap-3 mr-4">
+            <button onclick="bulkCopy()" class="bg-blue-800 hover:bg-blue-700 border border-blue-700 px-5 py-2 rounded-lg font-semibold transition text-sm">Copy</button>
+            <button onclick="bulkMove()" class="bg-blue-800 hover:bg-blue-700 border border-blue-700 px-5 py-2 rounded-lg font-semibold transition text-sm">Move</button>
+            <button onclick="bulkDelete()" class="bg-red-500 hover:bg-red-400 border border-red-500 px-5 py-2 rounded-lg font-semibold transition text-sm">Delete</button>
+        </div>
+    </div>
+
+    <div id="uploadManager" class="fixed bottom-6 right-6 w-96 bg-white border border-gray-200 shadow-2xl rounded-xl flex flex-col hidden z-40 max-h-[60vh]">
+        <div class="bg-gray-900 text-white p-4 rounded-t-xl flex justify-between items-center cursor-pointer shrink-0" onclick="toggleUploadQueue()">
+            <h3 class="font-bold text-sm" id="uploadTitle">Uploads</h3>
+            <button id="clearUploadsBtn" class="text-xs text-gray-400 hover:text-white" onclick="event.stopPropagation(); clearCompletedUploads()">Clear Done</button>
+        </div>
+        <div id="uploadList" class="flex-1 overflow-y-auto p-2 space-y-2 bg-gray-50 hide-scroll">
             </div>
-        </div>
     </div>
 
-    <div id="bulkActionBar" class="fixed bottom-0 left-0 w-full bg-gray-900 text-white p-4 flex justify-between items-center transform translate-y-full transition-transform duration-300 shadow-2xl z-50">
-        <div class="font-bold ml-4"><span id="selectedCount">0</span> Selected</div>
-        <div class="flex gap-2 mr-4">
-            <button onclick="bulkCopy()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded font-semibold transition text-sm md:text-base">Copy</button>
-            <button onclick="bulkMove()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded font-semibold transition text-sm md:text-base">Move</button>
-            <button onclick="bulkDelete()" class="bg-red-600 hover:bg-red-500 px-4 py-2 rounded font-semibold transition text-sm md:text-base">Delete</button>
-        </div>
-    </div>
-
-    <div id="actionModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 z-50 flex items-end md:items-center justify-center">
-        <div class="bg-white w-full md:w-96 rounded-t-2xl md:rounded-2xl p-6 shadow-2xl">
-            <h3 id="modalTitle" class="text-lg font-bold text-gray-800 mb-4 truncate border-b pb-2">Options</h3>
+    <div id="actionModal" class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 transition-opacity duration-200">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl transform scale-95 transition-transform duration-200" id="actionModalContent">
+            <h3 id="modalTitle" class="text-xl font-bold text-gray-900 mb-6 truncate border-b pb-4">Options</h3>
             <div id="modalButtons" class="flex flex-col gap-3"></div>
-            <button onclick="closeModal()" class="mt-6 w-full bg-gray-100 text-gray-800 p-4 rounded-xl font-bold hover:bg-gray-200 transition">Cancel</button>
+            <button onclick="closeModal()" class="mt-6 w-full bg-gray-100 text-gray-700 p-3 rounded-xl font-semibold hover:bg-gray-200 transition">Cancel</button>
         </div>
     </div>
 
@@ -95,6 +98,20 @@
         let selectedItems = new Set();
         let actionItem = null;
         let isNavigating = false; 
+
+        // --- CONCURRENT UPLOAD SYSTEM ---
+        const MAX_CONCURRENT_UPLOADS = 5; // Upload up to 5 files simultaneously
+        let uploadQueue = [];
+        let activeUploads = 0;
+        let uploadIdCounter = 0;
+
+        function formatBytes(bytes, decimals = 2) {
+            if (!bytes) return '0 Bytes';
+            const k = 1024, dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
 
         document.addEventListener('DOMContentLoaded', loadFiles);
 
@@ -115,13 +132,13 @@
                 tbody.innerHTML = '';
 
                 if (data.files.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="4" class="py-8 text-center text-gray-400 font-medium">Folder is empty</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="5" class="py-16 text-center text-gray-400 font-medium text-base">This folder is empty.<br><span class="text-sm font-normal">Drag and drop files here to upload.</span></td></tr>`;
                     return;
                 }
 
                 data.files.sort((a, b) => b.isDirectory - a.isDirectory).forEach(file => {
                     const tr = document.createElement('tr');
-                    tr.className = 'border-b hover:bg-gray-50 transition cursor-grab active:cursor-grabbing';
+                    tr.className = 'border-b border-gray-100 hover:bg-blue-50 transition-colors group cursor-default';
                     tr.draggable = true;
                     tr.ondragstart = (e) => dragStart(e, file.name);
 
@@ -131,27 +148,35 @@
                         tr.ondrop = (e) => dropOnFolder(e, file.name);
                     }
                     
+                    let icon = file.isDirectory ? 
+                        `<svg class="w-6 h-6 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path></svg>` : 
+                        `<svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>`;
+
                     let nameHtml = file.isDirectory 
-                        ? `<button onclick="navigateTo('${file.name}')" class="text-blue-600 font-bold hover:underline flex items-center gap-3 py-3 w-full text-left truncate"><span class="text-xl">📁</span> ${file.name}</button>`
-                        : `<span class="flex items-center gap-3 text-gray-700 py-3 font-medium truncate"><span class="text-xl">📄</span> ${file.name}</span>`;
+                        ? `<button onclick="navigateTo('${file.name}')" class="text-gray-900 font-semibold hover:text-blue-600 flex items-center gap-3 py-3 w-full text-left truncate transition">${icon} ${file.name}</button>`
+                        : `<span class="flex items-center gap-3 text-gray-700 py-3 font-medium truncate">${icon} ${file.name}</span>`;
 
                     tr.innerHTML = `
-                        <td class="text-center pl-2 w-10">
-                            <input type="checkbox" class="file-checkbox w-4 h-4 cursor-pointer" value="${file.name}" onchange="toggleSelection(this, '${file.name}')">
+                        <td class="text-center pl-6 w-12">
+                            <input type="checkbox" class="file-checkbox w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity" ${selectedItems.has(file.name) ? 'checked opacity-100' : ''} value="${file.name}" onchange="toggleSelection(this, '${file.name}')">
                         </td>
                         <td class="pl-2 w-full md:w-auto">${nameHtml}</td>
-                        <td class="text-sm text-gray-500 hidden md:table-cell">${file.isDirectory ? 'Folder' : 'File'}</td>
-                        <td class="pr-2 text-right">
-                            <button onclick="openModal('${file.name}', ${file.isZip})" class="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition">
-                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg>
+                        <td class="text-gray-500 hidden md:table-cell">${file.isDirectory ? '--' : formatBytes(file.size)}</td>
+                        <td class="text-gray-500 hidden sm:table-cell">${file.isDirectory ? 'Folder' : 'File'}</td>
+                        <td class="pr-6 text-right">
+                            <button onclick="openModal('${file.name}', ${file.isZip})" class="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-lg transition opacity-0 group-hover:opacity-100">
+                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
                             </button>
                         </td>
                     `;
+                    // Keep checkbox visible if selected
+                    if (selectedItems.has(file.name)) tr.querySelector('.file-checkbox').classList.remove('opacity-0');
                     tbody.appendChild(tr);
                 });
             } catch (err) { console.error(err); }
         }
 
+        // --- NAVIGATION & BULK ACTIONS ---
         function navigateTo(folder) {
             if (isNavigating) return;
             isNavigating = true;
@@ -169,17 +194,22 @@
         }
 
         function toggleSelection(checkbox, name) {
-            if (checkbox.checked) selectedItems.add(name);
-            else selectedItems.delete(name);
+            if (checkbox.checked) {
+                selectedItems.add(name);
+                checkbox.classList.remove('opacity-0');
+            } else {
+                selectedItems.delete(name);
+                checkbox.classList.add('opacity-0');
+            }
             updateBulkUI();
         }
 
         function toggleSelectAll(checkbox) {
             const checkboxes = document.querySelectorAll('.file-checkbox');
             if (checkbox.checked) {
-                checkboxes.forEach(cb => { cb.checked = true; selectedItems.add(cb.value); });
+                checkboxes.forEach(cb => { cb.checked = true; cb.classList.remove('opacity-0'); selectedItems.add(cb.value); });
             } else {
-                checkboxes.forEach(cb => { cb.checked = false; });
+                checkboxes.forEach(cb => { cb.checked = false; cb.classList.add('opacity-0'); });
                 selectedItems.clear();
             }
             updateBulkUI();
@@ -192,6 +222,7 @@
             else { bar.classList.add('translate-y-full'); document.getElementById('selectAll').checked = false; }
         }
 
+        // --- DRAG AND DROP ---
         function dragStart(e, name) {
             let itemsToDrag = Array.from(selectedItems);
             if (!selectedItems.has(name)) itemsToDrag = [name];
@@ -199,28 +230,33 @@
             e.dataTransfer.effectAllowed = 'move';
         }
 
-        function allowDrop(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
-        function dragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+        function allowDrop(e) { 
+            e.preventDefault(); 
+            if(e.currentTarget.tagName === 'TR') e.currentTarget.classList.add('drag-over'); 
+        }
+        function dragLeave(e) { 
+            if(e.currentTarget.tagName === 'TR') e.currentTarget.classList.remove('drag-over'); 
+        }
 
         async function dropOnFolder(e, folderName) {
             e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+            e.stopPropagation();
             try {
                 const items = JSON.parse(e.dataTransfer.getData('text/plain'));
                 const targetPath = currentPath ? `${currentPath}/${folderName}` : folderName;
                 await processBulkAction('/api/bulk-move', items, targetPath);
-            } catch(err) { console.error("Invalid drop"); }
+            } catch(err) { handleFileDrop(e, currentPath ? `${currentPath}/${folderName}` : folderName); }
         }
 
-        async function dropOnBack(e) {
-            e.preventDefault(); e.currentTarget.classList.remove('drag-over');
-            if (!currentPath) return;
-            try {
-                const items = JSON.parse(e.dataTransfer.getData('text/plain'));
-                const parts = currentPath.split('/');
-                parts.pop();
-                const targetPath = parts.join('/');
-                await processBulkAction('/api/bulk-move', items, targetPath);
-            } catch(err) { console.error("Invalid drop"); }
+        async function dropToCurrent(e) {
+            e.preventDefault();
+            handleFileDrop(e, currentPath);
+        }
+
+        function handleFileDrop(e, targetDir) {
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                queueFiles({ target: { files: e.dataTransfer.files } }, targetDir);
+            }
         }
 
         async function processBulkAction(endpoint, items, targetFolderPath = null) {
@@ -230,7 +266,7 @@
                 body: JSON.stringify({ currentPath, items, targetFolderPath })
             });
             const data = await res.json();
-            if (data.success) loadFiles(); else alert(data.error);
+            if (data.success) { selectedItems.clear(); loadFiles(); } else alert(data.error);
         }
 
         function bulkMove() {
@@ -260,132 +296,275 @@
             else alert(data.error);
         }
 
-        // --- Strictly Sequential Uploader with Path Snapshotting ---
-        async function uploadFiles(event) {
+
+        // --- FAST UPLOAD QUEUE & LOGIC ---
+        function queueFiles(event, dropPath = null) {
             const files = Array.from(event.target.files);
             if (!files.length) return;
 
-            // Take a snapshot of the current path when the upload starts
-            // This prevents bugs if the user navigates to a new folder while files are uploading
-            const uploadSnapshotPath = currentPath;
+            const baseUploadPath = dropPath !== null ? dropPath : currentPath;
+            document.getElementById('uploadManager').classList.remove('hidden');
 
-            const progressContainer = document.getElementById('progressContainer');
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const progressName = document.getElementById('progressName');
-
-            progressContainer.classList.remove('hidden');
-            
-            let totalSize = files.reduce((sum, f) => sum + f.size, 0);
-            let totalLoaded = 0;
-            let startTime = Date.now();
-
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                progressName.innerText = `Uploading to /${uploadSnapshotPath} (${i + 1}/${files.length}): ${file.name}`;
+            files.forEach(file => {
+                const id = `upload_${uploadIdCounter++}`;
                 
-                await new Promise((resolve, reject) => {
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    
-                    // Use the snapshot path instead of currentPath
-                    let targetDir = uploadSnapshotPath;
-                    if (file.webkitRelativePath) {
-                        const pathParts = file.webkitRelativePath.split('/');
-                        pathParts.pop(); 
-                        if (pathParts.length > 0) {
-                            targetDir = uploadSnapshotPath ? `${uploadSnapshotPath}/${pathParts.join('/')}` : pathParts.join('/');
-                        }
+                // Determine accurate path for folders
+                let targetDir = baseUploadPath;
+                if (file.webkitRelativePath) {
+                    const pathParts = file.webkitRelativePath.split('/');
+                    pathParts.pop(); 
+                    if (pathParts.length > 0) {
+                        targetDir = baseUploadPath ? `${baseUploadPath}/${pathParts.join('/')}` : pathParts.join('/');
                     }
-
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('POST', `/api/upload?path=${encodeURIComponent(targetDir)}`, true);
-
-                    let fileLastLoaded = 0;
-                    xhr.upload.onprogress = (e) => {
-                        if (e.lengthComputable) {
-                            totalLoaded += (e.loaded - fileLastLoaded);
-                            fileLastLoaded = e.loaded;
-                            
-                            const percent = totalSize > 0 ? Math.min(100, Math.round((totalLoaded / totalSize) * 100)) : 100;
-                            const timeElapsed = (Date.now() - startTime) / 1000;
-                            const speed = timeElapsed > 0 ? (totalLoaded / (1024 * 1024) / timeElapsed).toFixed(1) : 0;
-                            
-                            progressBar.style.width = percent + '%';
-                            progressText.innerText = `${percent}% (${speed} MB/s)`;
-                        }
-                    };
-
-                    xhr.onload = () => {
-                        if (xhr.status === 200) resolve();
-                        else {
-                            try { reject(JSON.parse(xhr.responseText).error || 'Upload failed'); } 
-                            catch (e) { reject('Upload failed'); }
-                        }
-                    };
-                    
-                    xhr.onerror = () => reject('Network Error');
-                    xhr.send(formData);
-                }).catch(err => alert(`Error uploading ${file.name}: ${err}`));
-
-                // Only refresh the UI if the user is STILL in the folder where the upload is happening
-                if (currentPath === uploadSnapshotPath) {
-                    loadFiles();
                 }
-            }
 
-            progressName.innerText = "All Complete!";
-            setTimeout(() => progressContainer.classList.add('hidden'), 1500);
+                const uploadTask = { id, file, targetDir, xhr: new XMLHttpRequest(), status: 'pending' };
+                uploadQueue.push(uploadTask);
+                createUploadUI(uploadTask);
+            });
+            
             event.target.value = ''; 
+            processQueue();
         }
 
-        // --- Single Action Modal ---
+        function createUploadUI(task) {
+            const list = document.getElementById('uploadList');
+            const item = document.createElement('div');
+            item.id = task.id;
+            item.className = 'upload-card bg-white p-3 rounded-lg border border-gray-100 shadow-sm text-sm flex flex-col gap-2';
+            item.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span class="font-medium truncate text-gray-700 w-3/4" title="${task.file.name}">${task.file.name}</span>
+                    <button onclick="cancelUpload('${task.id}')" class="text-gray-400 hover:text-red-500" title="Cancel">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-full bg-gray-200 rounded-full h-1.5">
+                        <div id="${task.id}_bar" class="bg-blue-500 h-1.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <span id="${task.id}_text" class="text-xs text-gray-500 whitespace-nowrap min-w-[3rem] text-right">0%</span>
+                </div>
+            `;
+            list.prepend(item); // Add to top
+            updateUploadTitle();
+        }
+
+        function processQueue() {
+            while (activeUploads < MAX_CONCURRENT_UPLOADS && uploadQueue.length > 0) {
+                const task = uploadQueue.shift();
+                if (task.status === 'cancelled') continue; 
+                startUpload(task);
+            }
+            updateUploadTitle();
+        }
+
+        function startUpload(task) {
+            activeUploads++;
+            task.status = 'uploading';
+            const formData = new FormData();
+            formData.append('file', task.file);
+
+            task.xhr.open('POST', `/api/upload?path=${encodeURIComponent(task.targetDir)}`, true);
+
+            task.xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    document.getElementById(`${task.id}_bar`).style.width = percent + '%';
+                    document.getElementById(`${task.id}_text`).innerText = percent + '%';
+                }
+            };
+
+            task.xhr.onload = () => {
+                activeUploads--;
+                const card = document.getElementById(task.id);
+                if (task.xhr.status === 200) {
+                    task.status = 'completed';
+                    document.getElementById(`${task.id}_bar`).classList.replace('bg-blue-500', 'bg-green-500');
+                    document.getElementById(`${task.id}_text`).innerText = 'Done';
+                    card.classList.add('completed');
+                    // Refresh view if the uploaded file is in the current visible directory
+                    if (task.targetDir === currentPath) loadFiles();
+                } else {
+                    task.status = 'error';
+                    document.getElementById(`${task.id}_bar`).classList.replace('bg-blue-500', 'bg-red-500');
+                    document.getElementById(`${task.id}_text`).innerText = 'Error';
+                }
+                processQueue();
+            };
+
+            task.xhr.onerror = () => {
+                activeUploads--;
+                task.status = 'error';
+                document.getElementById(`${task.id}_bar`).classList.replace('bg-blue-500', 'bg-red-500');
+                document.getElementById(`${task.id}_text`).innerText = 'Error';
+                processQueue();
+            };
+
+            task.xhr.onabort = () => {
+                activeUploads--;
+                task.status = 'cancelled';
+                const card = document.getElementById(task.id);
+                document.getElementById(`${task.id}_bar`).classList.replace('bg-blue-500', 'bg-gray-400');
+                document.getElementById(`${task.id}_text`).innerText = 'Canceled';
+                card.classList.add('cancelled');
+                processQueue();
+            };
+
+            task.xhr.send(formData);
+        }
+
+        function cancelUpload(id) {
+            // Find in active or queue
+            const card = document.getElementById(id);
+            if (!card) return;
+            
+            // It might be uploading right now
+            const isUploading = card.querySelector('.bg-blue-500');
+            if (isUploading) {
+                // We don't have direct access to the active tasks list easily in this simple structure, 
+                // but we know `xhr.abort()` triggers `onabort` which handles state cleanup.
+                // Because we need the XHR reference, let's find it (hacky but works without complex state management)
+                // In a true reactive app we'd keep the task list in a map. Let's assume user triggers UI.
+            }
+            // For true cancellation, we need the task object. Let's maintain a dictionary for active tasks in a real scenario.
+            // Since this is vanilla JS, I will trigger the visual change and prevent it if pending.
+            const pendingIndex = uploadQueue.findIndex(t => t.id === id);
+            if (pendingIndex > -1) {
+                uploadQueue[pendingIndex].status = 'cancelled';
+                document.getElementById(`${id}_bar`).classList.replace('bg-blue-500', 'bg-gray-400');
+                document.getElementById(`${id}_text`).innerText = 'Canceled';
+                card.classList.add('cancelled');
+            } else {
+                // It's active, we need to abort it. Since we didn't store active tasks in a map, 
+                // we should have added `onclick="cancelUpload('${task.id}', task)"`.
+                // Let's modify the cancel UI to just hide it if completed, or implement a map.
+                alert("Upload is already processing or finished. Aborting requires maintaining a task map (simplified here).");
+                card.style.display = 'none';
+            }
+        }
+        
+        // Let's inject a proper global task map to make cancellation flawless
+        const taskMap = new Map();
+        // Override the queue creation to populate map
+        const originalQueueFiles = queueFiles;
+        queueFiles = (event, dropPath) => {
+            const files = Array.from(event.target.files);
+            const baseUploadPath = dropPath !== null ? dropPath : currentPath;
+            document.getElementById('uploadManager').classList.remove('hidden');
+            files.forEach(file => {
+                const id = `upload_${uploadIdCounter++}`;
+                let targetDir = baseUploadPath;
+                if (file.webkitRelativePath) {
+                    const parts = file.webkitRelativePath.split('/'); parts.pop();
+                    if (parts.length > 0) targetDir = baseUploadPath ? `${baseUploadPath}/${parts.join('/')}` : parts.join('/');
+                }
+                const task = { id, file, targetDir, xhr: new XMLHttpRequest(), status: 'pending' };
+                taskMap.set(id, task);
+                uploadQueue.push(task);
+                createUploadUI(task);
+            });
+            event.target.value = ''; processQueue();
+        };
+
+        // Proper Cancel Function
+        function cancelUpload(id) {
+            const task = taskMap.get(id);
+            if (!task) return;
+            if (task.status === 'pending') {
+                task.status = 'cancelled';
+                updateUIDisplay(id, 'bg-gray-400', 'Canceled', true);
+            } else if (task.status === 'uploading') {
+                task.xhr.abort(); // Triggers onabort which handles the rest
+            } else {
+                // If done/error, just remove UI
+                document.getElementById(id).style.display = 'none';
+            }
+        }
+
+        function updateUIDisplay(id, colorClass, text, isCancelled = false) {
+            const card = document.getElementById(id);
+            const bar = document.getElementById(`${id}_bar`);
+            bar.className = `${colorClass} h-1.5 rounded-full`;
+            document.getElementById(`${id}_text`).innerText = text;
+            if (isCancelled) card.classList.add('cancelled');
+        }
+
+        function clearCompletedUploads() {
+            const list = document.getElementById('uploadList');
+            Array.from(list.children).forEach(card => {
+                if (card.classList.contains('completed') || card.classList.contains('cancelled') || document.getElementById(`${card.id}_text`).innerText === 'Error') {
+                    card.remove();
+                    taskMap.delete(card.id);
+                }
+            });
+            if (list.children.length === 0) document.getElementById('uploadManager').classList.add('hidden');
+        }
+
+        function updateUploadTitle() {
+            const total = uploadQueue.length + activeUploads;
+            document.getElementById('uploadTitle').innerText = total > 0 ? `Uploading ${activeUploads} (Queue: ${uploadQueue.length})` : 'Uploads Finished';
+        }
+
+        function toggleUploadQueue() {
+            const list = document.getElementById('uploadList');
+            list.classList.toggle('hidden');
+        }
+
+        // --- SINGLE ACTION MODAL ---
         function openModal(itemName, isZip) {
             actionItem = itemName;
             document.getElementById('modalTitle').innerText = itemName;
-            document.getElementById('actionModal').classList.remove('hidden');
+            
+            const modal = document.getElementById('actionModal');
+            const content = document.getElementById('actionModalContent');
+            modal.classList.remove('hidden');
+            // Small delay to trigger Tailwind transition
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+            }, 10);
+
             const btnContainer = document.getElementById('modalButtons');
             btnContainer.innerHTML = ''; 
 
-            if (isZip) btnContainer.innerHTML += `<button onclick="singleUnzip()" class="w-full bg-green-500 text-white p-4 rounded-xl font-bold text-lg hover:bg-green-600 transition shadow-sm mb-2">📦 Unzip Here</button>`;
+            if (isZip) btnContainer.innerHTML += `<button onclick="singleUnzip()" class="w-full bg-green-50 text-green-700 p-4 rounded-xl font-semibold border border-green-200 hover:bg-green-100 transition shadow-sm mb-2 flex items-center justify-center gap-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg> Extract Here</button>`;
             
             btnContainer.innerHTML += `
-                <button onclick="singleAction('rename')" class="w-full bg-yellow-100 text-yellow-700 p-4 rounded-xl font-bold text-lg hover:bg-yellow-200 transition">✏️ Rename</button>
-                <button onclick="singleAction('copy')" class="w-full bg-blue-100 text-blue-700 p-4 rounded-xl font-bold text-lg hover:bg-blue-200 transition">📄 Copy</button>
-                <button onclick="singleAction('move')" class="w-full bg-purple-100 text-purple-700 p-4 rounded-xl font-bold text-lg hover:bg-purple-200 transition">📁 Move</button>
-                <button onclick="singleAction('delete')" class="w-full bg-red-100 text-red-700 p-4 rounded-xl font-bold text-lg hover:bg-red-200 transition mt-2 border border-red-200">🗑️ Delete</button>
+                <button onclick="singleAction('rename')" class="w-full bg-gray-50 text-gray-700 p-3 rounded-xl font-semibold border border-gray-200 hover:bg-gray-100 transition">Rename</button>
+                <button onclick="singleAction('copy')" class="w-full bg-blue-50 text-blue-700 p-3 rounded-xl font-semibold border border-blue-200 hover:bg-blue-100 transition">Copy</button>
+                <button onclick="singleAction('move')" class="w-full bg-indigo-50 text-indigo-700 p-3 rounded-xl font-semibold border border-indigo-200 hover:bg-indigo-100 transition">Move</button>
+                <button onclick="singleAction('delete')" class="w-full bg-red-50 text-red-700 p-3 rounded-xl font-semibold border border-red-200 hover:bg-red-100 transition mt-2">Delete</button>
             `;
         }
-        function closeModal() { document.getElementById('actionModal').classList.add('hidden'); actionItem = null; }
+        
+        function closeModal() { 
+            const modal = document.getElementById('actionModal');
+            const content = document.getElementById('actionModalContent');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                actionItem = null;
+            }, 200);
+        }
 
         async function singleUnzip() {
             const item = actionItem; closeModal();
-            const res = await fetch('/api/unzip', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ currentPath, fileName: item })
-            });
-            if ((await res.json()).success) loadFiles(); else alert(data.error);
+            const res = await fetch('/api/unzip', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPath, fileName: item }) });
+            if ((await res.json()).success) loadFiles(); else alert("Error extracting");
         }
 
         async function renameItem(oldName, newName) {
-            const res = await fetch('/api/rename', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ currentPath, oldName, newName })
-            });
-            const data = await res.json();
-            if (data.success) loadFiles(); else alert(data.error);
+            const res = await fetch('/api/rename', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPath, oldName, newName }) });
+            if ((await res.json()).success) loadFiles(); else alert("Error renaming");
         }
 
         function singleAction(type) {
             const item = actionItem; closeModal();
-            
             if (type === 'rename') {
                 const newName = prompt(`Rename "${item}" to:`, item);
-                if (newName !== null && newName.trim() !== '' && newName !== item) {
-                    renameItem(item, newName.trim());
-                }
+                if (newName && newName.trim() !== '' && newName !== item) renameItem(item, newName.trim());
             } else if (type === 'delete') {
                 if (confirm(`Delete "${item}"?`)) processBulkAction('/api/bulk-delete', [item]);
             } else if (type === 'move') {
